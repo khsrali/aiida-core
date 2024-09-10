@@ -62,7 +62,7 @@ def _find_data_node(inputs: MappingType[str, Any], uuid: str) -> Optional[Node]:
     return data_node
 
 
-def upload_calculation(
+async def upload_calculation(
     node: CalcJobNode,
     transport: Transport,
     calc_info: CalcInfo,
@@ -192,7 +192,7 @@ def upload_calculation(
                         content = code.base.repository.get_object_content((pathlib.Path(root) / filename), mode='rb')
                         handle.write(content)
                         handle.flush()
-                        transport.put(handle.name, str(root / filename))
+                        await transport.put_async(handle.name, str(root / filename))
             transport.chmod(str(code.filepath_executable), 0o755)  # rwxr-xr-x
 
     # local_copy_list is a list of tuples, each with (uuid, dest_path, rel_path)
@@ -210,13 +210,13 @@ def upload_calculation(
 
     for file_copy_operation in file_copy_operation_order:
         if file_copy_operation is FileCopyOperation.LOCAL:
-            _copy_local_files(logger, node, transport, inputs, local_copy_list)
+            await _copy_local_files(logger, node, transport, inputs, local_copy_list)
         elif file_copy_operation is FileCopyOperation.REMOTE:
             if not dry_run:
                 _copy_remote_files(logger, node, computer, transport, remote_copy_list, remote_symlink_list)
         elif file_copy_operation is FileCopyOperation.SANDBOX:
             if not dry_run:
-                _copy_sandbox_files(logger, node, transport, folder)
+                await _copy_sandbox_files(logger, node, transport, folder)
         else:
             raise RuntimeError(f'file copy operation {file_copy_operation} is not yet implemented.')
 
@@ -330,7 +330,7 @@ def _copy_remote_files(logger, node, computer, transport, remote_copy_list, remo
             )
 
 
-def _copy_local_files(logger, node, transport, inputs, local_copy_list):
+async def _copy_local_files(logger, node, transport, inputs, local_copy_list):
     """Perform the copy instructions of the ``local_copy_list``."""
 
     for uuid, filename, target in local_copy_list:
@@ -375,21 +375,21 @@ def _copy_local_files(logger, node, transport, inputs, local_copy_list):
             if file_type_source == FileType.DIRECTORY:
                 # If the source object is a directory, we copy its entire contents
                 data_node.base.repository.copy_tree(filepath_target, filename_source)
-                transport.put(f'{dirpath}/*', target or '.', overwrite=True)
+                await transport.put_async(f'{dirpath}/*', target or '.', overwrite=True)
             else:
                 # Otherwise, simply copy the file
                 with filepath_target.open('wb') as handle:
                     with data_node.base.repository.open(filename_source, 'rb') as source:
                         shutil.copyfileobj(source, handle)
                 transport.makedirs(str(pathlib.Path(target).parent), ignore_existing=True)
-                transport.put(str(filepath_target), target)
+                await transport.put_async(str(filepath_target), target)
 
 
-def _copy_sandbox_files(logger, node, transport, folder):
+async def _copy_sandbox_files(logger, node, transport, folder):
     """Copy the contents of the sandbox folder to the working directory."""
     for filename in folder.get_content_list():
         logger.debug(f'[submission of calculation {node.pk}] copying file/folder {filename}...')
-        transport.put(folder.get_abs_path(filename), filename)
+        await transport.put_async(folder.get_abs_path(filename), filename)
 
 
 def submit_calculation(calculation: CalcJobNode, transport: Transport) -> str | ExitCode:
@@ -487,7 +487,7 @@ def stash_calculation(calculation: CalcJobNode, transport: Transport) -> None:
     remote_stash.base.links.add_incoming(calculation, link_type=LinkType.CREATE, link_label='remote_stash')
 
 
-def retrieve_calculation(
+async def retrieve_calculation(
     calculation: CalcJobNode, transport: Transport, retrieved_temporary_folder: str
 ) -> FolderData | None:
     """Retrieve all the files of a completed job calculation using the given transport.
@@ -530,14 +530,14 @@ def retrieve_calculation(
         retrieve_temporary_list = calculation.get_retrieve_temporary_list()
 
         with SandboxFolder(filepath_sandbox) as folder:
-            retrieve_files_from_list(calculation, transport, folder.abspath, retrieve_list)
+            await retrieve_files_from_list(calculation, transport, folder.abspath, retrieve_list)
             # Here I retrieved everything; now I store them inside the calculation
             retrieved_files.base.repository.put_object_from_tree(folder.abspath)
 
         # Retrieve the temporary files in the retrieved_temporary_folder if any files were
         # specified in the 'retrieve_temporary_list' key
         if retrieve_temporary_list:
-            retrieve_files_from_list(calculation, transport, retrieved_temporary_folder, retrieve_temporary_list)
+            await retrieve_files_from_list(calculation, transport, retrieved_temporary_folder, retrieve_temporary_list)
 
             # Log the files that were retrieved in the temporary folder
             for filename in os.listdir(retrieved_temporary_folder):
@@ -588,7 +588,7 @@ def kill_calculation(calculation: CalcJobNode, transport: Transport) -> None:
             )
 
 
-def retrieve_files_from_list(
+async def retrieve_files_from_list(
     calculation: CalcJobNode,
     transport: Transport,
     folder: str,
@@ -647,4 +647,4 @@ def retrieve_files_from_list(
 
         for rem, loc in zip(remote_names, local_names):
             transport.logger.debug(f"[retrieval of calc {calculation.pk}] Trying to retrieve remote item '{rem}'")
-            transport.get(rem, os.path.join(folder, loc), ignore_nonexisting=True)
+            await transport.get_async(rem, os.path.join(folder, loc), ignore_nonexisting=True)
