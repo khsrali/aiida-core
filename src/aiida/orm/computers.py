@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from aiida.orm import AuthInfo, User
     from aiida.orm.implementation import StorageBackend
     from aiida.schedulers import Scheduler
-    from aiida.transports import AsyncTransport, Transport
+    from aiida.transports import Transport
 
 __all__ = ('Computer',)
 
@@ -646,7 +646,7 @@ class Computer(entities.Entity['BackendComputer', ComputerCollection]):
         authinfo = authinfos.AuthInfo.get_collection(self.backend).get(dbcomputer=self, aiidauser=user)
         return authinfo.get_transport()
 
-    def get_transport_class(self) -> Union[Type['Transport'], Type['AsyncTransport']]:
+    def get_transport_class(self) -> Type['Transport']:
         """Get the transport class for this computer.  Can be used to instantiate a transport instance."""
         try:
             return TransportFactory(self.transport_type)
