@@ -134,7 +134,6 @@ def validate_stash_options(stash_options: Any, _: Any) -> Optional[str]:
         return f'`{port}` should be a member of aiida.common.datastructures.StashMode, got: {stash_mode}'
 
     dereference = stash_options.get('dereference', None)
-    file_name = stash_options.get('file_name', None)
 
     if stash_mode in [
         StashMode.COMPRESS_TAR.value,
@@ -145,14 +144,8 @@ def validate_stash_options(stash_options: Any, _: Any) -> Optional[str]:
         if not isinstance(dereference, bool):
             return f'`metadata.options.stash.dereference` should be a boolean, got: {dereference}'
 
-        if not isinstance(file_name, str):
-            return f'`metadata.options.stash.file_name` should be a string, got: {file_name}'
-    else:
-        if dereference is not None:
-            return '`metadata.options.stash.dereference` is only valid for compression stashing modes'
-
-        if file_name is not None:
-            return '`metadata.options.stash.file_name` is only valid for compression stashing modes'
+    elif dereference is not None:
+        return '`metadata.options.stash.dereference` is only valid for compression stashing modes'
 
     return None
 
@@ -441,13 +434,6 @@ class CalcJob(Process):
             valid_type=bool,
             required=False,
             help='Whether to follow symlinks while stashing or not, specific to StashMode.COMPRESS',
-        )
-        spec.input(
-            'metadata.options.stash.file_name',
-            valid_type=str,
-            required=False,
-            help='File name to be assigned to the compressed file. If not provided, '
-            'the UUID of the original calculation is chosen by default. Specific to StashMode.COMPRESS',
         )
         spec.output(
             'remote_folder',

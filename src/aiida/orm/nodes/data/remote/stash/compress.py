@@ -20,7 +20,7 @@ __all__ = ('RemoteStashCompressedData',)
 
 
 class RemoteStashCompressedData(RemoteStashData):
-    """ """
+    """Data plugin that models a compressed stashed file on a remote computer."""
 
     _storable = True
 

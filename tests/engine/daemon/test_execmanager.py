@@ -672,7 +672,6 @@ def test_stashing(
             'target_base': str(dest_path),
             'stash_mode': stash_mode,
             'dereference': True,  # ignored in case of COPY
-            'file_name': 'foo',  # ignored in case of COPY
         },
     )
 
@@ -697,14 +696,14 @@ def test_stashing(
 
     if stash_mode != StashMode.COPY.value:
         # more detailed test on integrity of the zip file is in `test_all_plugins.py`
-        assert pathlib.Path(str(dest_path / 'foo') + '.' + stash_mode).is_file()
+        assert pathlib.Path(str(dest_path / node.uuid) + '.' + stash_mode).is_file()
 
         with LocalTransport() as transport:
-            transport.extract(str(dest_path / 'foo') + '.' + stash_mode, dest_path / 'extracted')
+            transport.extract(str(dest_path / node.uuid) + '.' + stash_mode, dest_path / 'extracted')
         base_path = dest_path / 'extracted'
 
     else:
-        assert pathlib.Path(dest_path).is_dir()  # 'file_name' is ignored
+        assert pathlib.Path(dest_path).is_dir()
         base_path = dest_path
 
     serialize_file_hierarchy(base_path, read_bytes=True) == serialize_file_hierarchy(computer_wdir, read_bytes=True)
@@ -719,7 +718,6 @@ def test_stashing(
             'target_base': str(dest_path_error),
             'stash_mode': stash_mode,
             'dereference': True,  # ignored in case of COPY
-            'file_name': 'foo',  # ignored in case of COPY
         },
     )
 

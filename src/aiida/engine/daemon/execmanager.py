@@ -498,7 +498,7 @@ async def stash_calculation(calculation: CalcJobNode, transport: Transport) -> N
         # stash_mode values are identical with compression_format in transport plugin:
         # 'tar', 'tar.gz', 'tar.bz2', or 'tar.xz'
         compression_format = stash_mode
-        file_name = stash_options.get('file_name', uuid)
+        file_name = uuid
         dereference = stash_options.get('dereference', False)
         target_basepath = Path(stash_options['target_base'])
         authinfo = calculation.get_authinfo()

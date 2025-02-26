@@ -1118,38 +1118,8 @@ def test_additional_retrieve_list(generate_process, fixture_sandbox):
             {
                 'target_base': '/path',
                 'source_list': ['rel/path'],
-                'stash_mode': StashMode.COMPRESS_TAR.value,
-                'dereference': True,
-            },
-            '`metadata.options.stash.file_name` should be',
-        ),
-        (
-            {
-                'target_base': '/path',
-                'source_list': ['rel/path'],
-                'stash_mode': StashMode.COMPRESS_TAR.value,
-                'dereference': True,
-                'file_name': ['test.tar'],
-            },
-            '`metadata.options.stash.file_name` should be',
-        ),
-        (
-            {
-                'target_base': '/path',
-                'source_list': ['rel/path'],
-                'stash_mode': StashMode.COMPRESS_TAR.value,
-                'dereference': True,
-                'file_name': 'test.tar',
-            },
-            None,
-        ),
-        (
-            {
-                'target_base': '/path',
-                'source_list': ['rel/path'],
                 'stash_mode': StashMode.COMPRESS_TARBZ2.value,
                 'dereference': True,
-                'file_name': 'test.tar',
             },
             None,
         ),
@@ -1159,7 +1129,6 @@ def test_additional_retrieve_list(generate_process, fixture_sandbox):
                 'source_list': ['rel/path'],
                 'stash_mode': StashMode.COMPRESS_TARGZ.value,
                 'dereference': True,
-                'file_name': 'test.tar',
             },
             None,
         ),
@@ -1169,18 +1138,8 @@ def test_additional_retrieve_list(generate_process, fixture_sandbox):
                 'source_list': ['rel/path'],
                 'stash_mode': StashMode.COMPRESS_TARXZ.value,
                 'dereference': True,
-                'file_name': 'test.tar',
             },
             None,
-        ),
-        (
-            {
-                'target_base': '/path',
-                'source_list': ['rel/path'],
-                'stash_mode': StashMode.COPY.value,
-                'file_name': 'A_NAME',
-            },
-            '`metadata.options.stash.file_name` is only valid for compression stashing modes',
         ),
         (
             {
