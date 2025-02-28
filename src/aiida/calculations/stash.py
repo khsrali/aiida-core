@@ -11,7 +11,7 @@
 from aiida import orm
 from aiida.common.datastructures import CalcInfo
 from aiida.engine import CalcJob
-
+from aiida.orm import RemoteStashData
 
 class StashCalculation(CalcJob):
     """
@@ -48,6 +48,64 @@ class StashCalculation(CalcJob):
         spec.input(
             'source_node',
             valid_type=(orm.RemoteData, orm.SinglefileData),
+            required=True,
+            help='',
+        )
+
+        # Code is irrelevant for this calculation.
+        spec.inputs.pop('code', None)
+
+        # Ideally one could use the same computer as the one of the `source_node`.
+        # However, if another computer has access to the directory, we don't want to restrict.`
+        spec.inputs['metadata']['computer'].required = True
+        spec.inputs['metadata']['options']['resources'].default = {
+            'num_machines': 1,
+            'num_mpiprocs_per_machine': 1,
+        }
+
+    def prepare_for_submission(self, folder):
+        calc_info = CalcInfo()
+        calc_info.skip_submit = True
+
+        calc_info.codes_info = []
+        calc_info.retrieve_list = []
+        calc_info.local_copy_list = []
+        calc_info.remote_copy_list = []
+        calc_info.remote_symlink_list = []
+
+        return calc_info
+
+class UnStashCalculation(CalcJob):
+    """
+    Utility to un-stash files from a remote folder.
+    The destination folder is the working directory of the original calculation.
+
+    An example of how the input should look like:
+
+    .. code-block:: python
+
+        inputs = {
+            'metadata': {
+                'computer': Computer.collection.get(label="localhost"),
+                'options': {
+                    'resources': {'num_machines': 1},
+                },
+            },
+            'source_node': node_1,
+        }
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @classmethod
+    def define(cls, spec):
+        super().define(spec)
+
+        spec.input(
+            'source_node',
+            valid_type=RemoteStashData,
             required=True,
             help='',
         )

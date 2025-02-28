@@ -422,6 +422,24 @@ def submit_calculation(calculation: CalcJobNode, transport: Transport) -> str | 
 
     return result
 
+async def stash_or_unstash_calculation(calculation: CalcJobNode, transport: Transport) -> None:
+    if calculation.process_type != 'aiida.calculations:core.unstash':
+        return await stash_calculation(calculation, transport)
+
+    return await unstash_calculation(calculation, transport)
+
+async def unstash_calculation(calculation: CalcJobNode, transport: Transport) -> None:
+    from aiida.common.datastructures import StashMode
+    from aiida.orm import RemoteStashCompressedData, RemoteStashFolderData
+
+    logger_extra = get_dblogger_extra(calculation)
+
+    remote_node = load_node(calculation.inputs.source_node.pk)
+    uuid = calculation.inputs.source_node.uuid
+    source_basepath = Path(remote_node.get_remote_path())
+
+    
+
 
 async def stash_calculation(calculation: CalcJobNode, transport: Transport) -> None:
     """Stash files from the working directory of a completed calculation to a permanent remote folder.

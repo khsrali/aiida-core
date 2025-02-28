@@ -370,7 +370,7 @@ async def task_stash_job(node: CalcJobNode, transport_queue: TransportQueue, can
             transport = await cancellable.with_interrupt(request)
 
             logger.info(f'stashing calculation<{node.pk}>')
-            return await execmanager.stash_calculation(node, transport)
+            return await execmanager.stash_or_unstash_calculation(node, transport)
 
     try:
         await exponential_backoff_retry(
@@ -384,7 +384,7 @@ async def task_stash_job(node: CalcJobNode, transport_queue: TransportQueue, can
         raise
     except Exception as exception:
         logger.warning(f'stashing calculation<{node.pk}> failed')
-        raise TransportTaskException(f'stash_calculation failed {max_attempts} times consecutively') from exception
+        raise TransportTaskException(f'stash_or_unstash_calculation failed {max_attempts} times consecutively') from exception
     else:
         node.set_state(CalcJobState.RETRIEVING)
         logger.info(f'stashing calculation<{node.pk}> successful')
