@@ -1,3 +1,11 @@
+###########################################################################
+# Copyright (c), The AiiDA team. All rights reserved.                     #
+# This file is part of the AiiDA code.                                    #
+#                                                                         #
+# The code is hosted on GitHub at https://github.com/aiidateam/aiida-core #
+# For further information on the license, see the LICENSE.txt file        #
+# For further information please visit http://www.aiida.net               #
+###########################################################################
 """Data plugin that models an archived folder on a remote computer."""
 
 from aiida.common.datastructures import StashMode
@@ -36,13 +44,16 @@ class RemoteStashData(Data):
         ),
     ]
 
-    def __init__(self, stash_mode: StashMode, **kwargs):
+    def __init__(self, stash_mode: StashMode, original_node_uuid: int = None, **kwargs):
         """Construct a new instance
 
         :param stash_mode: the stashing mode with which the data was stashed on the remote.
         """
         super().__init__(**kwargs)
         self.stash_mode = stash_mode
+
+        if original_node_uuid is not None:
+            self.original_node_uuid = original_node_uuid
 
     @property
     def stash_mode(self) -> StashMode:
@@ -60,3 +71,20 @@ class RemoteStashData(Data):
         """
         type_check(value, StashMode)
         self.base.attributes.set('stash_mode', value.value)
+
+    @property
+    def original_node_uuid(self) -> str:
+        """Return the original UUID of the node to be stashed.
+
+        :return: the original UUID.
+        """
+        return self.base.attributes.get('original_node_uuid')
+
+    @original_node_uuid.setter
+    def original_node_uuid(self, value: str):
+        """Set the original UUID of the node to be stashed.
+
+        :param value: the original UUID.
+        """
+        type_check(value, str)
+        self.base.attributes.set('original_node_uuid', value)
