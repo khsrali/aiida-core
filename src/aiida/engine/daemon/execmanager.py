@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
 from typing import Mapping as MappingType
 
 from aiida.common import AIIDA_LOGGER, exceptions
+from aiida.common.asserts import assert_never
 from aiida.common.datastructures import CalcInfo, FileCopyOperation
 from aiida.common.folders import Folder, SandboxFolder
 from aiida.common.links import LinkType
@@ -448,10 +449,6 @@ async def stash_calculation(calculation: CalcJobNode, transport: Transport) -> N
     if not source_list:
         return
 
-    if stash_mode not in [mode.value for mode in StashMode.__members__.values()]:
-        EXEC_LOGGER.warning(f'stashing mode {stash_mode} is not supported. Stashing skipped.')
-        return
-
     EXEC_LOGGER.debug(
         f'stashing files with mode {stash_mode} for calculation<{calculation.pk}>: {source_list}', extra=logger_extra
     )
@@ -537,6 +534,9 @@ async def stash_calculation(calculation: CalcJobNode, transport: Transport) -> N
             EXEC_LOGGER.debug(f'stashed {source_list} to {target_destination}')
 
         remote_stash.store()
+
+    else:
+        assert_never(stash_mode)
 
     remote_stash.base.links.add_incoming(calculation, link_type=LinkType.CREATE, link_label='remote_stash')
 

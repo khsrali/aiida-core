@@ -433,7 +433,7 @@ class CalcJob(Process):
             'metadata.options.stash.dereference',
             valid_type=bool,
             required=False,
-            help='Whether to follow symlinks while stashing or not, specific to StashMode.COMPRESS',
+            help='Whether to follow symlinks while stashing or not, specific to StashMode.COMPRESS_* enums',
         )
         spec.output(
             'remote_folder',
