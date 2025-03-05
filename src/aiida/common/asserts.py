@@ -8,7 +8,13 @@
 ###########################################################################
 """Module with asserts that can be used in the codebase."""
 
-from typing import Never, Optional
+from typing import Optional
+
+try:
+    from typing import Never
+except ImportError:
+    # Fallback for Python 3.10 and older
+    from typing_extensions import Never
 
 
 def assert_never(arg: Never, message: Optional[str] = None) -> Never:
