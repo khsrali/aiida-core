@@ -32,6 +32,7 @@ from aiida.transports.transport import (
 
 __all__ = ('AsyncSshTransport',)
 
+ASYNCSSH = 'async-ssh'
 
 def validate_script(ctx, param, value: str):
     if value == 'None':
@@ -131,6 +132,8 @@ class AsyncSshTransport(AsyncTransport):
         self.script_before = kwargs.pop('script_before', 'None')
 
         self._concurrent_io = 0
+
+        self._method = ASYNCSSH
 
     @property
     def max_io_allowed(self):
@@ -302,13 +305,11 @@ class AsyncSshTransport(AsyncTransport):
 
         try:
             await self._lock()
-            await self._sftp.get(
-                remotepaths=remotepath,
-                localpath=localpath,
-                preserve=preserve,
-                recurse=False,
-                follow_symlinks=dereference,
-            )
+            await self.async_engine('get', {'remotepath': remotepath, 
+                                            'localpath': localpath, 
+                                            'dereference': dereference, 
+                                            'preserve': preserve,
+                                            'recursive': True})
             await self._unlock()
         except (OSError, asyncssh.Error) as exc:
             raise OSError(f'Error while uploading file {localpath}: {exc}')
@@ -373,13 +374,12 @@ class AsyncSshTransport(AsyncTransport):
         for content_ in content_list:
             try:
                 await self._lock()
-                await self._sftp.get(
-                    remotepaths=PurePath(remotepath) / content_,
-                    localpath=localpath,
-                    preserve=preserve,
-                    recurse=True,
-                    follow_symlinks=dereference,
-                )
+                parentpath  = PurePath(remotepath) / content_
+                await self.async_engine('gettree', {'remotepath': parentpath,
+                                                    'localpath': localpath,
+                                                    'dereference': dereference,
+                                                    'preserve': preserve,
+                                                    'recursive': True})
                 await self._unlock()
             except (OSError, asyncssh.Error) as exc:
                 raise OSError(f'Error while uploading file {localpath}: {exc}')
@@ -509,13 +509,11 @@ class AsyncSshTransport(AsyncTransport):
 
         try:
             await self._lock()
-            await self._sftp.put(
-                localpaths=localpath,
-                remotepath=remotepath,
-                preserve=preserve,
-                recurse=False,
-                follow_symlinks=dereference,
-            )
+            await self.async_engine('put', {'localpath': localpath,
+                                            'remotepath': remotepath,
+                                            'preserve': preserve,
+                                            'dereference': dereference,
+                                            'recursive': False})
             await self._unlock()
         except (OSError, asyncssh.Error) as exc:
             raise OSError(f'Error while uploading file {localpath}: {exc}')
@@ -583,13 +581,13 @@ class AsyncSshTransport(AsyncTransport):
         for content_ in content_list:
             try:
                 await self._lock()
-                await self._sftp.put(
-                    localpaths=PurePath(localpath) / content_,
-                    remotepath=remotepath,
-                    preserve=preserve,
-                    recurse=True,
-                    follow_symlinks=dereference,
-                )
+                parentpath = PurePath(localpath) / content_
+                await self.async_engine('puttree', {'localpath': parentpath,
+                                                    'remotepath': remotepath,
+                                                    'preserve': preserve,
+                                                    'recursive': True,
+                                                    'dereference': dereference,
+                                                    })
                 await self._unlock()
             except (OSError, asyncssh.Error) as exc:
                 raise OSError(f'Error while uploading file {PurePath(localpath)/content_}: {exc}')
@@ -922,11 +920,13 @@ class AsyncSshTransport(AsyncTransport):
             workdir = str(workdir)
             command = f'cd {workdir} && ( {command} )'
 
-        bash_commmand = self._bash_command_str + '-c '
+        bash_command = self._bash_command_str + '-c '
 
-        result = await self._conn.run(
-            bash_commmand + escape_for_bash(command), input=stdin, check=False, timeout=timeout
-        )
+        result = await self.async_engine('run', {'command': escape_for_bash(command),
+                                                 'bash_command': bash_command,
+                                                 'stdin': stdin,
+                                                 'timeout': timeout,
+                                                })
         # Since the command is str, both stdout and stderr are strings
         return (result.returncode, ''.join(str(result.stdout)), ''.join(str(result.stderr)))
 
@@ -956,7 +956,7 @@ class AsyncSshTransport(AsyncTransport):
         path = str(path)
         from aiida.transports.util import FileAttribute
 
-        asyncssh_attr = await self._sftp.lstat(path)
+        asyncssh_attr = await self.async_engine('lstat', {'path': path})
         aiida_attr = FileAttribute()
         # map the asyncssh class into the aiida one
         for key in aiida_attr._valid_fields:
@@ -992,7 +992,7 @@ class AsyncSshTransport(AsyncTransport):
 
         path = str(path)
 
-        return await self._sftp.isdir(path)
+        return await self.async_engine('isdir', {'path': path})
 
     async def isfile_async(self, path: TransportPath):
         """Return True if the given path is a file, False otherwise.
@@ -1010,7 +1010,7 @@ class AsyncSshTransport(AsyncTransport):
 
         path = str(path)
 
-        return await self._sftp.isfile(path)
+        return await self.async_engine('isfile', {'path': path})
 
     async def listdir_async(self, path: TransportPath, pattern=None):
         """Return a list of the names of the entries in the given path.
@@ -1027,12 +1027,12 @@ class AsyncSshTransport(AsyncTransport):
         """
         path = str(path)
         if not pattern:
-            list_ = list(await self._sftp.listdir(path))
+            list_ = await self.async_engine('listdir', {'path': path})
         else:
             patterned_path = pattern if pattern.startswith('/') else Path(path).joinpath(pattern)
             # I put the type ignore here because the asyncssh.sftp.glob()
-            # method alwyas returns a sequence of str, if input is str
-            list_ = list(await self._sftp.glob(patterned_path))  # type: ignore[arg-type]
+            # method always returns a sequence of str, if input is str
+            list_ = list(await self.glob_async(patterned_path))  # type: ignore[arg-type]
 
         for item in ['..', '.']:
             if item in list_:
@@ -1082,55 +1082,102 @@ class AsyncSshTransport(AsyncTransport):
 
         :param path: absolute path to directory to create
         :param bool ignore_existing: if set to true, it doesn't give any error
-                if the leaf directory does already exist
+                if the directory already exists
 
         :type path:  :class:`Path <pathlib.Path>`, :class:`PurePosixPath <pathlib.PurePosixPath>`, or `str`
 
         :raises: OSError, if directory at path already exists
         """
         path = str(path)
-
         try:
-            await self._sftp.makedirs(path, exist_ok=ignore_existing)
-        except SFTPFileAlreadyExists as exc:
+            await self.async_engine('makedirs', {'path': path, 'exist_ok': ignore_existing})
+        except FileExistsError as exc:
+            if ignore_existing:
+                return
             raise OSError(f'Error while creating directory {path}: {exc}, directory already exists')
-        except asyncssh.sftp.SFTPFailure as exc:
-            if (self._sftp.version < 6) and not ignore_existing:
-                raise OSError(f'Error while creating directory {path}: {exc}, probably it already exists')
-            else:
-                raise TransportInternalError(f'Error while creating directory {path}: {exc}')
 
     async def mkdir_async(self, path: TransportPath, ignore_existing=False):
         """Create a directory.
 
         :param path: absolute path to directory to create
         :param bool ignore_existing: if set to true, it doesn't give any error
-                if the leaf directory does already exist
+                if the directory already exists
 
         :type path:  :class:`Path <pathlib.Path>`, :class:`PurePosixPath <pathlib.PurePosixPath>`, or `str`
 
         :raises: OSError, if directory at path already exists
         """
         path = str(path)
-
         try:
-            await self._sftp.mkdir(path)
-        except SFTPFileAlreadyExists as exc:
-            # note: mkdir() in asyncssh does not support the exist_ok parameter
+            self.async_engine('mkdir', {'path': path, 'exist_ok': ignore_existing})
+        except FileExistsError as exc:
             if ignore_existing:
                 return
             raise OSError(f'Error while creating directory {path}: {exc}, directory already exists')
-        except asyncssh.sftp.SFTPFailure as exc:
-            if self._sftp.version < 6:
-                if ignore_existing:
-                    return
-                else:
-                    raise OSError(f'Error while creating directory {path}: {exc}, probably it already exists')
-            else:
-                raise TransportInternalError(f'Error while creating directory {path}: {exc}')
 
     async def normalize_async(self, path: TransportPath):
         raise NotImplementedError('Not implemented, waiting for a use case.')
+
+
+    async def async_engine(self, action: str, params: dict = {}):
+        if action == 'listdir':
+            return list(await self._sftp.listdir(params['path']))
+
+        if action == 'isdir':
+            return await self._sftp.isdir(params['path'])
+        
+        elif action == 'isfile':
+            return await self._sftp.isfile(params['path'])
+    
+        elif action == 'lstat':
+            return await self._sftp.lstat(params['path'])
+
+        elif action =='run':
+            return await self._conn.run(
+                params['bash_command'] + params['command'],
+                input=params['stdin'],
+                check=False,
+                timeout=params['timeout'],
+            )
+        elif action in ['put', 'puttree']:
+            return await self._sftp.put(
+                localpaths=params['localpath'],
+                remotepath=params['remotepath'],
+                preserve=params['preserve'],
+                recurse=params['recursive'],
+                follow_symlinks=params['dereference'],
+            )
+        elif action == 'get':
+            return await self._sftp.get(
+                remotepaths=params['remotepath'],
+                localpath=params['localpath'],
+                preserve=params['preserve'],
+                recurse=params['recursive'],
+                follow_symlinks=params['dereference'],
+            )
+
+        elif action in ['mkdir', 'makedirs']:
+            try:
+                if action == 'mkdir':
+                    # note: mkdir() in asyncssh does not support the exist_ok parameter
+                    # we handle it via a try-except block
+                    await self._sftp.mkdir(params['path'])
+                else:
+                    await self._sftp.makedirs(params['path'], exist_ok=params['exist_ok'])
+            except SFTPFileAlreadyExists as exc:
+                # SFTPFileAlreadyExists is only supported in asyncssh version 6.0.0 and later
+                raise FileExistsError(f"Directory already exists: {params['path']}")
+            except asyncssh.sftp.SFTPFailure as exc:
+                if self._sftp.version < 6:
+                    raise FileExistsError(f"Directory already exists: {params['path']}")
+                else:
+                    raise TransportInternalError(f'Error while creating directory {params['path']}: {exc}')
+
+       
+        else:
+            raise TransportInternalError(f'Invalid action: {action}')
+
+
 
     async def remove_async(self, path: TransportPath):
         """Remove the file at the given path. This only works on files;
@@ -1252,7 +1299,7 @@ class AsyncSshTransport(AsyncTransport):
                 raise ValueError('`remotedestination` cannot have patterns')
 
             # find all files matching pattern
-            for this_source in await self._sftp.glob(remotesource):
+            for this_source in await self.glob_async(remotesource):
                 # create the name of the link: take the last part of the path
                 this_dest = os.path.join(remotedestination, os.path.split(this_source)[-1])  # type: ignore [arg-type]
                 # in the line above I am sure that this_source is a string,
