@@ -20,7 +20,7 @@ __all__ = ('RemoteStashCompressedData',)
 
 
 class RemoteStashCompressedData(RemoteStashData):
-    """Data plugin that models a compressed stashed file on a remote computer."""
+    """ """
 
     _storable = True
 
@@ -67,7 +67,7 @@ class RemoteStashCompressedData(RemoteStashData):
             StashMode.COMPRESS_TARGZ,
             StashMode.COMPRESS_TARXZ,
         ]:
-            raise ValueError(
+            raise TypeError(
                 '`RemoteStashCompressedData` can only be used with `stash_mode` being either '
                 '`StashMode.COMPRESS_TAR`, `StashMode.COMPRESS_TARGZ`, '
                 '`StashMode.COMPRESS_TARBZ2` or `StashMode.COMPRESS_TARXZ`.'

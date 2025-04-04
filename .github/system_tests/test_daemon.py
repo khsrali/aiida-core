@@ -438,7 +438,7 @@ def launch_all():
 
     # Testing the stashing functionality
     # To speedup, here we only check with StashMode.COPY.
-    # All stash_modes are tested individually in `test_execmanager.py`
+    # All stash_modes are tested individually in `test_execmanager.py``
     print('Testing the stashing functionality')
     process, inputs, expected_result = create_calculation_process(code=code_doubler, inputval=1)
     with tempfile.TemporaryDirectory() as tmpdir:

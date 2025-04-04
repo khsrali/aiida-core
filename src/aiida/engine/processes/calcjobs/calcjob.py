@@ -118,14 +118,28 @@ def validate_stash_options(stash_options: Any, _: Any) -> Optional[str]:
     source_list = stash_options.get('source_list', None)
     stash_mode = stash_options.get('stash_mode', None)
 
-    if not isinstance(target_base, str) or not os.path.isabs(target_base):
-        return f'`metadata.options.stash.target_base` should be an absolute filepath, got: {target_base}'
+    if stash_mode is not StashMode.CUSTOM_SCRIPT.value:
+        if not isinstance(target_base, str) or not os.path.isabs(target_base):
+            return f'`metadata.options.stash.target_base` should be an absolute filepath, got: {target_base}'
 
-    if not isinstance(source_list, (list, tuple)) or any(
-        not isinstance(src, str) or os.path.isabs(src) for src in source_list
-    ):
-        port = 'metadata.options.stash.source_list'
-        return f'`{port}` should be a list or tuple of relative filepaths, got: {source_list}'
+        if not isinstance(source_list, (list, tuple)) or any(
+            not isinstance(src, str) or os.path.isabs(src) for src in source_list
+        ):
+            port = 'metadata.options.stash.source_list'
+            return f'`{port}` should be a list or tuple of relative filepaths, got: {source_list}'
+
+        if stash_options.get('custom_command', None) is not None:
+            return f'`metadata.options.stash.target_base` is not an input for {stash_mode} stashing mode'
+    else:
+        custom_command = stash_options.get('custom_command', None)
+        if not isinstance(custom_command, str):
+            return f'`metadata.options.stash.custom_command` should be a string, got: {custom_command}'
+
+        if stash_options.get('target_base', None) is not None:
+            return '`metadata.options.stash.target_base` is not an input for `StashMode.CUSTOM_SCRIPT` stashing mode'
+
+        if stash_options.get('source_list', None) is not None:
+            return '`metadata.options.stash.source_list` is not an input for `StashMode.CUSTOM_SCRIPT` stashing mode'
 
     try:
         StashMode(stash_mode)
@@ -134,6 +148,7 @@ def validate_stash_options(stash_options: Any, _: Any) -> Optional[str]:
         return f'`{port}` should be a member of aiida.common.datastructures.StashMode, got: {stash_mode}'
 
     dereference = stash_options.get('dereference', None)
+    file_name = stash_options.get('file_name', None)
 
     if stash_mode in [
         StashMode.COMPRESS_TAR.value,
@@ -144,8 +159,14 @@ def validate_stash_options(stash_options: Any, _: Any) -> Optional[str]:
         if not isinstance(dereference, bool):
             return f'`metadata.options.stash.dereference` should be a boolean, got: {dereference}'
 
-    elif dereference is not None:
-        return '`metadata.options.stash.dereference` is only valid for compression stashing modes'
+        if not isinstance(file_name, str):
+            return f'`metadata.options.stash.file_name` should be a string, got: {file_name}'
+    else:
+        if dereference is not None:
+            return '`metadata.options.stash.dereference` is only valid for compression stashing modes'
+
+        if file_name is not None:
+            return '`metadata.options.stash.file_name` is only valid for compression stashing modes'
 
     return None
 
@@ -433,7 +454,20 @@ class CalcJob(Process):
             'metadata.options.stash.dereference',
             valid_type=bool,
             required=False,
-            help='Whether to follow symlinks while stashing or not, specific to StashMode.COMPRESS_* enums',
+            help='Whether to follow symlinks while stashing or not, specific to StashMode.COMPRESS',
+        )
+        spec.input(
+            'metadata.options.stash.file_name',
+            valid_type=str,
+            required=False,
+            help='File name to be assigned to the compressed file. If not provided, '
+            'the UUID of the original calculation is chosen by default. Specific to StashMode.COMPRESS',
+        )
+        spec.input(
+            'metadata.options.stash.custom_command',
+            valid_type=str,
+            required=False,
+            help='',
         )
         spec.output(
             'remote_folder',
@@ -879,7 +913,6 @@ class CalcJob(Process):
                 )
 
             code.validate_working_directory(folder)
-
         calc_info = self.prepare_for_submission(folder)
         calc_info.uuid = str(self.node.uuid)
 
