@@ -131,3 +131,28 @@ class StashCalculation(CalcJob):
             calc_info.remote_symlink_list = []
 
         return calc_info
+
+
+class UnStashCalculation(CalcJob):
+    """
+    Utility to unstash files from a remote folder.
+
+    An example of how the input should look like:
+
+    .. code-block:: python
+
+        inputs = {
+            'metadata': {
+                'computer': Computer.collection.get(label="localhost"),
+                'options': {
+                    'resources': {'num_machines': 1},
+                    'unstash': {
+                        'stash_mode': StashMode.COPY.value,
+                        'target_base': '/scratch/my_stashing/',
+                        'source_list': ['aiida.in', '_aiidasubmit.sh'],
+                    },
+                },
+            },
+            'source_node': node_1,
+        }
+    """
