@@ -68,6 +68,7 @@ class _DetachedProxyCommand(ProxyCommand):
             if f is None:
                 continue
             try:
+                # breakpoint()
                 f.close()
             except ValueError:
                 pass

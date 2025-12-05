@@ -34,7 +34,7 @@ class BashCliScheduler(Scheduler, metaclass=abc.ABCMeta):
         )
         return self._parse_submit_output(*result)
 
-    def get_jobs(
+    async def get_jobs_async(
         self,
         jobs: list[str] | None = None,
         user: str | None = None,
@@ -48,8 +48,12 @@ class BashCliScheduler(Scheduler, metaclass=abc.ABCMeta):
             returned, where the ``job_id`` is the key and the values are the ``JobInfo`` objects.
         :returns: List of active jobs.
         """
-        with self.transport:
-            retval, stdout, stderr = self.transport.exec_command_wait(self._get_joblist_command(jobs=jobs, user=user))
+
+        if not self.transport._is_open:
+            breakpoint()
+        retval, stdout, stderr = await self.transport.exec_command_wait_async(
+            self._get_joblist_command(jobs=jobs, user=user)
+        )
 
         joblist = self._parse_joblist_output(retval, stdout, stderr)
         if as_dict:

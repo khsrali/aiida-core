@@ -133,6 +133,7 @@ class AsyncSshTransport(AsyncTransport):
         # a computer with core.ssh_async transport plugin should be configured before any instantiation.
         self.machine = kwargs.pop('host', kwargs.pop('machine'))
         self._max_io_allowed = kwargs.pop('max_io_allowed', self._DEFAULT_max_io_allowed)
+        self._semaphore = asyncio.Semaphore(self._max_io_allowed)
         self.script_before = kwargs.pop('script_before', 'None')
 
         if kwargs.get('backend') == 'openssh':
@@ -145,19 +146,19 @@ class AsyncSshTransport(AsyncTransport):
 
             self.async_backend = _AsyncSSH(self.machine, self.logger, self._bash_command_str)  # type: ignore[assignment]
 
-        self._concurrent_io = 0
-
     @property
     def max_io_allowed(self):
         return self._max_io_allowed
 
-    async def _lock(self, sleep_time=0.5):
-        while self._concurrent_io >= self.max_io_allowed:
-            await asyncio.sleep(sleep_time)
-        self._concurrent_io += 1
+    @property
+    def active_io_operations(self):
+        """Return the number of currently active I/O operations."""
+        return self._max_io_allowed - self._semaphore._value
 
-    async def _unlock(self):
-        self._concurrent_io -= 1
+    @property
+    def available_io_slots(self):
+        """Return the number of available I/O slots."""
+        return self._semaphore._value
 
     async def open_async(self):
         """Open the transport.
@@ -166,7 +167,12 @@ class AsyncSshTransport(AsyncTransport):
 
         :raises InvalidOperation: if the transport is already open
         """
+        # if self.active_io_operations != 0:
+        # That means the transport is already in open and being used
+        # return self
+
         if self._is_open:
+            # That means the transport is already open, while it should not
             raise InvalidOperation('Cannot open the transport twice')
 
         if self.script_before != 'None':
@@ -186,11 +192,22 @@ class AsyncSshTransport(AsyncTransport):
 
         :raises InvalidOperation: if the transport is already closed
         """
+        if self.active_io_operations != 0:
+            # That means the transport is still in use
+            return
+        # breakpoint()
         if not self._is_open:
+            return
+            # That means the transport is already closed, while it should not
             raise InvalidOperation('Cannot close the transport: it is already closed')
 
-        await self.async_backend.close()
-        self._is_open = False
+        try:
+            await self.async_backend.close()
+        except Exception as exc:
+            # Log but don't raise - we're trying to close anyway
+            self.logger.debug(f'Exception while closing transport: {exc}')
+        finally:
+            self._is_open = False
 
     def __str__(self):
         return f"{'OPEN' if self._is_open else 'CLOSED'} [AsyncSshTransport]"
@@ -316,14 +333,17 @@ class AsyncSshTransport(AsyncTransport):
         if os.path.isfile(localpath) and not overwrite:
             raise OSError('Destination already exists: not overwriting it')
 
-        try:
-            await self._lock()
-            await self.async_backend.get(
-                remotepath=remotepath, localpath=localpath, dereference=dereference, preserve=preserve, recursive=False
-            )
-            await self._unlock()
-        except OSError as exc:
-            raise OSError(f'Error while downloading file {remotepath}: {exc}')
+        async with self._semaphore:
+            try:
+                await self.async_backend.get(
+                    remotepath=remotepath,
+                    localpath=localpath,
+                    dereference=dereference,
+                    preserve=preserve,
+                    recursive=False,
+                )
+            except OSError as exc:
+                raise OSError(f'Error while downloading file {remotepath}: {exc}')
 
     async def gettree_async(
         self,
@@ -383,19 +403,18 @@ class AsyncSshTransport(AsyncTransport):
 
         content_list = await self.listdir_async(remotepath)
         for content_ in content_list:
-            try:
-                await self._lock()
-                parentpath = str(PurePath(remotepath) / content_)
-                await self.async_backend.get(
-                    remotepath=parentpath,
-                    localpath=localpath,
-                    dereference=dereference,
-                    preserve=preserve,
-                    recursive=True,
-                )
-                await self._unlock()
-            except OSError as exc:
-                raise OSError(f'Error while downloading file {parentpath}: {exc}')
+            parentpath = str(PurePath(remotepath) / content_)
+            async with self._semaphore:
+                try:
+                    await self.async_backend.get(
+                        remotepath=parentpath,
+                        localpath=localpath,
+                        dereference=dereference,
+                        preserve=preserve,
+                        recursive=True,
+                    )
+                except OSError as exc:
+                    raise OSError(f'Error while downloading file {parentpath}: {exc}')
 
     async def put_async(
         self,
@@ -528,14 +547,17 @@ class AsyncSshTransport(AsyncTransport):
         if await self.isfile_async(remotepath) and not overwrite:
             raise OSError('Destination already exists: not overwriting it')
 
-        try:
-            await self._lock()
-            await self.async_backend.put(
-                localpath=localpath, remotepath=remotepath, dereference=dereference, preserve=preserve, recursive=False
-            )
-            await self._unlock()
-        except OSError as exc:
-            raise OSError(f'Error while uploading file {localpath}: {exc}')
+        async with self._semaphore:
+            try:
+                await self.async_backend.put(
+                    localpath=localpath,
+                    remotepath=remotepath,
+                    dereference=dereference,
+                    preserve=preserve,
+                    recursive=False,
+                )
+            except OSError as exc:
+                raise OSError(f'Error while uploading file {localpath}: {exc}')
 
     async def puttree_async(
         self,
@@ -598,19 +620,18 @@ class AsyncSshTransport(AsyncTransport):
         # Or to put and rename the parent folder at the same time
         content_list = os.listdir(localpath)
         for content_ in content_list:
-            try:
-                await self._lock()
-                parentpath = str(PurePath(localpath) / content_)
-                await self.async_backend.put(
-                    localpath=parentpath,
-                    remotepath=remotepath,
-                    dereference=dereference,
-                    preserve=preserve,
-                    recursive=True,
-                )
-                await self._unlock()
-            except OSError as exc:
-                raise OSError(f'Error while uploading file {parentpath}: {exc}')
+            parentpath = str(PurePath(localpath) / content_)
+            async with self._semaphore:
+                try:
+                    await self.async_backend.put(
+                        localpath=parentpath,
+                        remotepath=remotepath,
+                        dereference=dereference,
+                        preserve=preserve,
+                        recursive=True,
+                    )
+                except OSError as exc:
+                    raise OSError(f'Error while uploading file {parentpath}: {exc}')
 
     async def copy_async(
         self,
@@ -861,16 +882,70 @@ class AsyncSshTransport(AsyncTransport):
         :return: a tuple with the return code, the stdout and the stderr of the command
         :rtype: tuple(int, str, str)
         """
+        # I_opened = False
+        # if not self._is_open:
+        #     await self.open_async()
+        #     I_opened = True
+        # breakpoint()
+        # raise InvalidOperation('Cannot execute command: transport is not open')
 
         if workdir:
             workdir = str(workdir)
             command = f'cd {workdir} && ( {command} )'
 
-        return await self.async_backend.run(
-            command=command,
-            stdin=stdin,
-            timeout=timeout,
+        self.logger.debug(
+            f'Waiting for semaphore (active: {self.active_io_operations}/{self.max_io_allowed}) '
+            f'for command: {command[:50]}...'
         )
+
+        if command != 'ps -xo pid,stat,user,time| tail -n +2':
+            if self._is_open is False:
+                breakpoint()
+        print(f'Executing command: {command}')
+        async with self._semaphore:
+            if command != 'ps -xo pid,stat,user,time| tail -n +2':
+                if self._is_open is False:
+                    breakpoint()
+            self.logger.debug(
+                f'Acquired semaphore (active: {self.active_io_operations}/{self.max_io_allowed}), '
+                f'executing command: {command[:50]}...'
+            )
+            try:
+                result = await self.async_backend.run(
+                    command=command,
+                    stdin=stdin,
+                    timeout=timeout,
+                )
+            except Exception as exc:
+                if command != 'ps -xo pid,stat,user,time| tail -n +2':
+                    if self._is_open is False:
+                        breakpoint()
+                # If connection closed, try to reconnect once
+                if 'connection closed' in str(exc).lower() or 'connection lost' in str(exc).lower():
+                    self.logger.warning('Connection closed, attempting reconnect...')
+                    try:
+                        # Close the broken connection
+                        await self.async_backend.close()
+                    except Exception:
+                        pass
+
+                    # Reopen
+                    self._is_open = False
+                    await self.open_async()
+
+                    # Retry the command once
+                    self.logger.info('Reconnected, retrying command...')
+                    result = await self.async_backend.run(
+                        command=command,
+                        stdin=stdin,
+                        timeout=timeout,
+                    )
+                else:
+                    raise
+            finally:
+                self.logger.debug(f'Released semaphore (active: {self.active_io_operations}/{self.max_io_allowed})')
+
+        return result
 
     async def get_attribute_async(self, path: TransportPath):
         """Return an object FixedFieldsAttributeDict for file in a given path,

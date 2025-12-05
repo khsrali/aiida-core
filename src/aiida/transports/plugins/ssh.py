@@ -675,6 +675,9 @@ class SshTransport(BlockingTransport):
             '`getcwd()` is deprecated and will be removed in the next major version. Use absolute paths instead.',
             version=3,
         )
+        return self._getcwd()
+
+    def _getcwd(self):
         return self.sftp.getcwd()
 
     def makedirs(self, path: TransportPath, ignore_existing: bool = False):

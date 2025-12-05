@@ -9,6 +9,7 @@
 """Transport interface."""
 
 import abc
+import asyncio
 import fnmatch
 import os
 import re
@@ -185,6 +186,7 @@ class Transport(abc.ABC):
         """Closes connections, if needed (used in 'with' statements)."""
         self._enters -= 1
         if self._enters == 0:
+            # breakpoint()
             self.close()
 
     @property
@@ -572,6 +574,18 @@ class Transport(abc.ABC):
             version=3,
         )
 
+        def _getcwd(self):
+        """
+        DEPRECATED: This method is deprecated and should be removed in the next major version.
+            PLEASE DON'T USE IT IN THE INTERFACE!!
+
+        Get working directory
+        :return: a string identifying the current working directory
+        """
+            return
+
+
+
     @abc.abstractmethod
     def get_attribute(self, path: TransportPath):
         """Return an object FixedFieldsAttributeDict for file in a given path,
@@ -686,7 +700,7 @@ class Transport(abc.ABC):
                 'and will be removed in the next major version.',
                 version=3,
             )
-            cwd = self.getcwd()
+            cwd = self._getcwd()
         for file_name in self.listdir(cwd):
             filepath = os.path.join(cwd, file_name)
             attributes = self.get_attribute(filepath)

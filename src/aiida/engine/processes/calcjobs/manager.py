@@ -106,7 +106,7 @@ class JobsList:
             else:
                 kwargs['jobs'] = self._get_jobs_with_scheduler()
 
-            scheduler_response = scheduler.get_jobs(**kwargs)
+            scheduler_response = await scheduler.get_jobs_async(**kwargs)
 
             # Update the last update time and clear the jobs cache
             self._last_updated = time.time()
