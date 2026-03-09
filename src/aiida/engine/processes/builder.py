@@ -141,6 +141,11 @@ class ProcessBuilderNamespace(MutableMapping):
         return sorted(set(self._valid_fields + [key for key, _ in self.__dict__.items() if key.startswith('_')]))
 
     def __iter__(self):
+        for name in self._valid_fields:
+            if name not in self._data:
+                port = self._port_namespace.get(name)
+                if isinstance(port, PortNamespace):
+                    self._data[name] = ProcessBuilderNamespace(port)
         for key in self._data:
             yield key
 
